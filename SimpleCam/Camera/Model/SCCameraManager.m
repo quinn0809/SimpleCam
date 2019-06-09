@@ -7,6 +7,7 @@
 //
 
 #import "SCFileHelper.h"
+#import "SCFaceDetectorManager.h"
 
 #import "SCCameraManager.h"
 
@@ -15,7 +16,7 @@ static CGFloat const kMinVideoScale = 1.0f;
 
 static SCCameraManager *_cameraManager;
 
-@interface SCCameraManager ()
+@interface SCCameraManager () <GPUImageVideoCameraDelegate>
 
 @property (nonatomic, strong, readwrite) GPUImageStillCamera *camera;
 @property (nonatomic, weak) GPUImageView *outputView;
@@ -134,6 +135,10 @@ static SCCameraManager *_cameraManager;
     return time;
 }
 
+- (BOOL)isPositionFront {
+    return self.camera.cameraPosition == AVCaptureDevicePositionFront;
+}
+
 #pragma mark - Custom Accessor
 
 - (void)commonInit {
@@ -157,7 +162,7 @@ static SCCameraManager *_cameraManager;
     
     // 坐标转换
     CGPoint currentPoint = CGPointMake(focusPoint.y / self.outputView.bounds.size.height, 1 - focusPoint.x / self.outputView.bounds.size.width);
-    if (self.camera.cameraPosition == AVCaptureDevicePositionFront) {
+    if ([self isPositionFront]) {
         currentPoint = CGPointMake(currentPoint.x, 1 - currentPoint.y);
     }
     
@@ -227,6 +232,7 @@ static SCCameraManager *_cameraManager;
     self.camera.outputImageOrientation = UIInterfaceOrientationPortrait;
     self.camera.horizontallyMirrorFrontFacingCamera = YES;
     [self.camera addAudioInputsAndOutputs];
+    self.camera.delegate = self;
     
     self.currentFilterHandler.source = self.camera;
 }
@@ -276,7 +282,7 @@ static SCCameraManager *_cameraManager;
  */
 - (void)syncFlashState {
     AVCaptureDevice *device = self.camera.inputCamera;
-    if (![device hasFlash] || self.camera.cameraPosition == AVCaptureDevicePositionFront) {
+    if (![device hasFlash] || [self isPositionFront]) {
         [self closeFlashIfNeed];
         return;
     }
@@ -327,6 +333,12 @@ static SCCameraManager *_cameraManager;
             break;
     }
     return CGSizeMake(videoWidth, videoHeight);
+}
+
+#pragma mark - GPUImageVideoCameraDelegate
+
+- (void)willOutputSampleBuffer:(CMSampleBufferRef)sampleBuffer {
+    [SCFaceDetectorManager detectWithSampleBuffer:sampleBuffer isMirror:[self isPositionFront]];
 }
 
 @end
